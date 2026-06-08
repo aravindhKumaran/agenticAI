@@ -1,0 +1,13 @@
+Models:
+========
+groq_model = "groq:qwen/qwen3-32b"
+gemini_model = "google_genai:gemini-2.5-flash-lite"
+
+Tools:
+======
+Binding methods -> create_agent(), model.bind_tools()
+
+Structured_output:
+=================
+Pydantic, TypedDict, dataclass
+
