@@ -10,4 +10,3 @@ Binding methods -> create_agent(), model.bind_tools()
 Structured_output:
 =================
 Pydantic, TypedDict, dataclass
-

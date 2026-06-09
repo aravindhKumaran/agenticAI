@@ -6,3 +6,5 @@ langchain-google-genai
 langgraph
 langsmith
 python-dotenv
+langchain-mcp-adapters
+mcp
