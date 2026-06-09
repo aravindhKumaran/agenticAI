@@ -3,4 +3,6 @@ langchain_community
 langchain-openai
 langchain-groq
 langchain-google-genai
+langgraph
+langsmith
 python-dotenv
