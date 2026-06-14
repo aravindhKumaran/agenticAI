@@ -10,3 +10,64 @@ Binding methods -> create_agent(), model.bind_tools()
 Structured_output:
 =================
 Pydantic, TypedDict, dataclass
+
+
+
+Traditional RAG pipeline:
+RAG is a technique that allows you to query your own private data with an LLM in an end-to-end manner. 
+
+
+- document structure -> pdf, html, excel, db
+- data ingestion pipeline -> extract, split, embed, store
+- retrieval pipeline -> query, embed, search, rerank, generate
+
+Document structures:
+- text, doc, pdf, excel, images, audio, video, code, database, url
+
+Document parsers:
+- Unstructured, PyMuPDF, Tesseract, Playwright, BeautifulSoup, PDFMiner, Sphinx, Pandoc, Python-docx, openpyxl
+
+langchain document loaders:
+- TextLoader
+- DirectoryLoader
+- PDFPlumberLoader
+- UnstructuredURLLoader
+- WebBaseLoader
+- PyPDFLoader
+- CSVLoader
+- JSONLoader
+- PyPDFDirectoryLoader
+
+Spliting Strategies:
+- RecursiveCharacterTextSplitter
+- CharacterTextSplitter
+- TokenTextSplitter
+- MarkdownTextSplitter
+- HTMLHeaderTextSplitter
+- NLTKTextSplitter
+- spaCyTextSplitter 
+- langchain.text_splitter
+
+Chunking strategies:
+- Fixed-size chunking
+- Semantic chunking
+- Hierarchical chunking
+- Recursive chunking
+- Overlapping chunking
+- Content-aware chunking
+
+context size -> No of tokens that the model can process at a time
+
+Embedding models:
+- SentenceTransformers, OpenAI, Cohere, HuggingFaceEmbeddings,OpenAIEmbeddings,HuggingFaceEmbeddings,Chroma 
+
+embedding dimension -> No of dimensions in the embedding vector 
+
+Vector stores:
+- Chroma, FAISS, Pinecone, Weaviate (cloud), Weaviate(on-prem), Qdrant, Elasticsearch, pgvector
+
+LLM models:
+- groq, OpenAI, Google, Azure, Anthropic, Cohere, HuggingFace, TogetherAI, Ollama, LlamaCpp, vLLM, TGI 
+
+
+
