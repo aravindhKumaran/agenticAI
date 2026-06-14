@@ -1,106 +1,110 @@
-# 📦 MCP (Model Context Protocol) Study Guide
+# 📦 MCP (Model Context Protocol) Study Guide & Reference
 
-This subfolder contains a lightweight **Model Context Protocol (MCP)** implementation used to expose external tools/services (e.g., a math server or a weather server) to LLM agents.
-
-## 📂 Directory Contents
-- `client.py` – example client that connects to the MCP server, sends a request, and receives a JSON response.
-- `math_server.py` – tiny HTTP server exposing a `calculate(a, b, op)` endpoint.
-- `weather_server.py` – mock weather service returning a forecast for a given city.
-- `docs.MD` – additional documentation (auto‑generated).
-- `README_MCP_Architecture.md` – architecture diagram (kept for reference).
-
-## 🎯 What MCP Solves
-MCP provides a **standardized JSON‑based contract** between an LLM‑driven agent and external services:
-1. **Request** – `{ "method": "calculate", "params": { "a": 2, "b": 3, "op": "+" } }`
-2. **Response** – `{ "result": 5, "status": "ok" }`
-
-This decouples the agent logic from the service implementation, making it easy to plug‑in new tools (e.g., weather, calculator, database) without changing the agent code.
-
-## 🛠️ Typical MCP Flow (Mermaid Diagram)
-```mermaid
-flowchart TD
-    A[LLM Agent] -->|Tool Call (JSON)| B[MCP Client (client.py)]
-    B -->|HTTP POST| C[MCP Server]
-    C -->|Dispatch to Service| D[Math / Weather Server]
-    D -->|Result JSON| C
-    C -->|JSON Response| B
-    B -->|Tool Result| A
-```
-
-## 📄 Code Walk‑through
-### `client.py`
-```python
-import requests
-import json
-
-def call_mcp(method: str, params: dict):
-    payload = {"method": method, "params": params}
-    response = requests.post("http://localhost:8000", json=payload)
-    return response.json()
-
-# Example usage
-result = call_mcp("calculate", {"a": 4, "b": 2, "op": "*"})
-print(result)  # → {"result": 8, "status": "ok"}
-```
-*The client serialises a request, posts it to the MCP server, and parses the JSON reply.*
-
-### `math_server.py`
-```python
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import json
-
-class MathHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        data = json.loads(self.rfile.read(int(self.headers["Content-Length"])) )
-        method = data["method"]
-        params = data["params"]
-        if method == "calculate":
-            a, b, op = params["a"], params["b"], params["op"]
-            ops = {"+": a + b, "-": a - b, "*": a * b, "/": a / b}
-            result = ops.get(op, None)
-            response = {"result": result, "status": "ok"}
-        else:
-            response = {"error": "unknown method", "status": "error"}
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(response).encode())
-
-if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", 8000), MathHandler)
-    print("MCP Math Server listening on :8000")
-    server.serve_forever()
-```
-*The server receives the JSON payload, executes the requested operation, and returns a JSON result.*
-
-### `weather_server.py`
-```python
-# Simplified mock weather server – returns a static forecast
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import json
-
-class WeatherHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        data = json.loads(self.rfile.read(int(self.headers["Content-Length"])) )
-        city = data["params"].get("city", "unknown")
-        response = {"city": city, "forecast": "Sunny, 25°C", "status": "ok"}
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(response).encode())
-
-if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", 8001), WeatherHandler)
-    print("MCP Weather Server listening on :8001")
-    server.serve_forever()
-```
-*Provides a deterministic weather forecast for any city – useful for quick testing of LLM agents.*
-
-## 📚 Study Tips
-- **Run the servers** (`python math_server.py` & `python weather_server.py`) before invoking the client.
-- **Inspect the JSON** – the exact format is what the LLM agent sees, so keep it stable.
-- **Add new services** by defining a new handler and updating the client to use a new `method` name.
-- **Combine with LangChain** – bind `client.call_mcp` as a LangChain tool to let the agent call any MCP‑exposed service.
+This folder contains the codebase (`client.py`, `math_server.py`, and `weather_server.py`) demonstrating integration with the **Model Context Protocol (MCP)**. This guide explains the core concepts, protocols, runtime architectures, and integration workflows implemented in the code.
 
 ---
-*For a visual overview, see `README_MCP_Architecture.md` in this folder.*
+
+## 🎯 What is MCP?
+
+The **Model Context Protocol (MCP)** is a lightweight, standardized JSON-RPC specification designed to connect LLM-driven agents to external systems, tools, and databases. 
+
+Traditionally, developers hardcode API calls and tool execution wrappers directly inside their agent packages. This approach introduces coupling and scaling challenges:
+*   **Coupling**: If a tool updates, the agent code must be redeployed.
+*   **Language Locking**: Agent code and tool integrations must be written in the same programming language (typically Python).
+*   **Security Risk**: Tools execute within the same process context as the agent, complicating permissions and sandboxing.
+
+MCP solves these problems by **decoupling** the agent client from the tool server. The agent simply communicates via standard JSON payloads over a transport layer (like HTTP, WebSockets, or standard input/output streams), enabling modular, language-agnostic integrations.
+
+```mermaid
+flowchart LR
+    Agent["LLM Agent (Python/LangChain)"] -->|"JSON-RPC Request"| Client["MCP Client (client.py)"]
+    Client -->|"HTTP POST (JSON)"| Server["MCP Server (math_server.py / weather_server.py)"]
+    Server -->|"Execute Function"| Service["Tool Logic"]
+```
+
+---
+
+## 🏗️ MCP Architecture In-Depth
+
+MCP divides roles into two clear abstractions: the **MCP Client** and the **MCP Server**.
+
+### 1️⃣ MCP Client (`client.py`)
+The MCP Client acts as the gateway for the LLM agent. Its job is to:
+*   Expose a single execution function: `call_mcp(method: str, params: dict) -> dict`.
+*   Serialize request arguments into the standard protocol payload.
+*   Transmit payloads via HTTP POST to the target server's endpoint.
+*   Parse standard JSON response packages, catch error status codes, and propagate exceptions back to the agent framework.
+
+```python
+# Conceptual client request schema
+payload = {
+    "method": "calculate",
+    "params": {"a": 10, "b": 5, "op": "+"}
+}
+```
+
+---
+
+### 2️⃣ MCP Server (`math_server.py` & `weather_server.py`)
+MCP Servers host the actual execution logic. To remain lightweight and dependency-free, this codebase implements servers using Python's native `http.server.HTTPServer` class.
+*   **Request Handling Lifecycle**:
+    1.  Listen on a designated local port (e.g. `8000` for Math, `8001` for Weather).
+    2.  Receive HTTP POST requests, reading raw body bytes.
+    3.  Deserialize bytes into JSON objects, extracting the requested `method` and `params` arguments.
+    4.  Dispatch execution to local Python functions using a dispatcher lookup map (e.g. mapping `"calculate"` to the local calculator code).
+    5.  Pack the return value or execution errors into a response payload and return it over HTTP.
+
+```mermaid
+sequenceDiagram
+    participant Agent as LLM Agent
+    participant Client as MCP Client (client.py)
+    participant Server as MCP Server (math_server.py)
+    
+    Agent->>Client: call_mcp("calculate", {a, b, op})
+    Client->>Server: HTTP POST / { method: "calculate", params: {...} }
+    Note over Server: Read HTTP Bytes <br/> parse JSON payload <br/> lookup "calculate" handler
+    Server->>Server: Execute calculator logic (10 + 5)
+    Server-->>Client: HTTP 200 OK / { result: 15, status: "ok" }
+    Client-->>Agent: Return dict {"result": 15, "status": "ok"}
+```
+
+---
+
+## 🛠️ Exposing MCP Tools inside LangChain
+
+To allow LangChain agents to invoke tools hosted on MCP servers, the client wrapper must be registered in the model's tool list. This is done by wrapping the client's `call_mcp` function in a LangChain `StructuredTool` object.
+
+```mermaid
+flowchart TD
+    Func["Define call_mcp wrapper function"] --> Tool["StructuredTool.from_function()"]
+    Tool -->|"model.bind_tools([mcp_tool])"| Model["ChatModel Instance"]
+    User["User Query: 'Add 10 and 5'"] --> Model
+    Model -->|"Generates tool call schema"| Exec["Call call_mcp wrapper"]
+    Exec --> Server["MCP Server execution"]
+```
+
+---
+
+## 📚 Repository Walk-through & Code Map
+
+The code files in this folder are organized as follows:
+
+*   **[`client.py`](file:///f:/WeCloudData/AI/AgenticAI/langchain_ai/MCP/client.py)**: Implements client network logic. Exposes `call_mcp` and handles routing requests to configured server URL endpoints.
+*   **[`math_server.py`](file:///f:/WeCloudData/AI/AgenticAI/langchain_ai/MCP/math_server.py)**: Spawns an HTTP service listening on port `8000`. Exposes the `"calculate"` method, executing math operations (`+`, `-`, `*`, `/`) on numeric arguments.
+*   **[`weather_server.py`](file:///f:/WeCloudData/AI/AgenticAI/langchain_ai/MCP/weather_server.py)**: Spawns an HTTP service listening on port `8001`. Exposes the `"forecast"` method, returning mock forecast descriptions for requested city parameters.
+*   **[`README_MCP_Architecture.md`](file:///f:/WeCloudData/AI/AgenticAI/langchain_ai/MCP/README_MCP_Architecture.md)**: Conceptual overview and detailed diagrams of the protocol framework.
+*   **[`docs.MD`](file:///f:/WeCloudData/AI/AgenticAI/langchain_ai/MCP/docs.MD)**: Auto-generated documentation details.
+
+---
+
+## ✅ Best-Practice Study Checklist
+
+*   **Ensure servers are running before calling**: The MCP Client does not auto-start services. Make sure servers are running on their configured ports before running the client.
+    ```bash
+    python math_server.py      # Runs on port 8000
+    python weather_server.py   # Runs on port 8001
+    ```
+*   **Design tool payloads to be lightweight**: Avoid sending large images, binaries, or raw HTML blocks over MCP to keep transport serialization costs low.
+*   **Enforce parameter validation at the server side**: Since the server executes arbitary parameters sent by the LLM, validate argument types and ranges inside the server handler before processing logic.
+*   **Wrap errors in standard JSON schemas**: If an operation fails on the server, return a structured error status (e.g. `{"status": "error", "error": "Division by zero"}`) rather than crashing the HTTP worker, allowing the client to propagate errors cleanly.
+*   **Isolate and containerize servers**: Keep your services decoupled. Deploy servers in standalone containers or sandbox execution spaces to secure access to system files, databases, or API credentials.

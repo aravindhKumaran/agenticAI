@@ -19,8 +19,8 @@ flowchart TD
     F --> G{Middleware?}
     G -->|Yes| H[Run Middleware Hooks]
     H --> I[Model Call]
-    I --> J[Tool Calls (if any)]
-    J --> K[Post‑Processing (Structured Output)]
+    I --> J["Tool Calls (if any)"]
+    J --> K["Post-Processing (Structured Output)"]
     G -->|No| I
     K --> L[Return Final Message]
     L --> M[Display to User]
